@@ -18,7 +18,7 @@ logging.basicConfig(format='%(levelname)s::%(filename)s::%(funcName)s::%(message
 LOG_LEVEL = 10  # DEBUG
 
 
-def driver_factory(browser):
+def driver_factory(browser, executor):
     if browser == "chrome":
         logger = logging.getLogger('chrome_fixture')
         logger.setLevel(LOG_LEVEL)
@@ -27,10 +27,14 @@ def driver_factory(browser):
         options.add_argument('--ignore-ssl-errors=yes')
         options.add_argument('--ignore-certificate-errors')
         logger.info("Подготовка среды для запуска тестов...")
-        caps = DesiredCapabilities.CHROME
-        caps['loggingPrefs'] = {'performance': 'ALL', 'browser': 'ALL'}
         options.add_experimental_option('w3c', False)
-        driver = EventFiringWebDriver(webdriver.Chrome(desired_capabilities=caps, options=options), MyListener())
+        driver = EventFiringWebDriver(webdriver.Remote(command_executor=f"http://{executor}:4444/wd/hub",
+                                                       desired_capabilities={"browserName": browser,
+                                                                             "platform": "WIN10",
+                                                                             "platformName": "WIN10"
+                                                                             },
+                                                       options=options),
+                                      MyListener())
         logger.debug("Браузер Chrome запущен со следующими desired_capabilities:{}".format(driver.desired_capabilities))
     elif browser == "firefox":
         profile = FirefoxProfile()
@@ -44,14 +48,15 @@ def driver_factory(browser):
 
 
 def pytest_addoption(parser):
-    parser.addoption("--browser", action="store", default="chrome")
+    parser.addoption("--browser", action="store", default="chrome", choices=["chrome", "firefox", "opera", "yandex"])
+    parser.addoption("--executor", action="store", default="localhost")
 
 
 @pytest.fixture(scope="session")
 def browser(request):
     logger = logging.getLogger('browser_fixture')
     logger.setLevel(LOG_LEVEL)
-    driver = driver_factory(request.config.getoption("--browser"))
+    driver = driver_factory(request.config.getoption("--browser"), request.config.getoption("--executor"))
     driver.maximize_window()
 
     def fin():
@@ -65,7 +70,8 @@ def browser(request):
 @pytest.fixture()
 def base_page(browser):
     page = BasePage(browser)
-    page.go_to(url="http://localhost//")
+    page.go_to(url="http://demo-opencart.ru/")
+    # page.go_to(url="http://localhost//")
     return page
 
 
