@@ -5,6 +5,8 @@ from selenium.webdriver import ChromeOptions
 from selenium.webdriver import FirefoxOptions, FirefoxProfile
 from selenium.webdriver.support.events import AbstractEventListener, EventFiringWebDriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.common.keys import Keys
 from pages.base import BasePage
 from pages.catalog import CatalogPage
 from pages.product_card import ProductCardPage
@@ -16,9 +18,10 @@ from pages.upload_file_mozilla_page import UploadFileMozillaPage
 
 logging.basicConfig(format='%(levelname)s::%(filename)s::%(funcName)s::%(message)s', filename="logs/selenium.log")
 LOG_LEVEL = 10  # DEBUG
+BROWSERSTACK_URL = 'https://kronnmc1:pzufg1TVRsg6sDsLUSHU@hub-cloud.browserstack.com/wd/hub'
 
 
-def driver_factory(browser):
+def driver_factory(browser, executor):
     if browser == "chrome":
         logger = logging.getLogger('chrome_fixture')
         logger.setLevel(LOG_LEVEL)
@@ -27,10 +30,14 @@ def driver_factory(browser):
         options.add_argument('--ignore-ssl-errors=yes')
         options.add_argument('--ignore-certificate-errors')
         logger.info("Подготовка среды для запуска тестов...")
-        caps = DesiredCapabilities.CHROME
-        caps['loggingPrefs'] = {'performance': 'ALL', 'browser': 'ALL'}
         options.add_experimental_option('w3c', False)
-        driver = EventFiringWebDriver(webdriver.Chrome(desired_capabilities=caps, options=options), MyListener())
+        driver = EventFiringWebDriver(webdriver.Remote(command_executor=f"http://{executor}:4444/wd/hub",
+                                                       desired_capabilities={"browserName": browser,
+                                                                             "platform": "WIN10",
+                                                                             "platformName": "WIN10"
+                                                                             },
+                                                       options=options),
+                                      MyListener())
         logger.debug("Браузер Chrome запущен со следующими desired_capabilities:{}".format(driver.desired_capabilities))
     elif browser == "firefox":
         profile = FirefoxProfile()
@@ -44,19 +51,44 @@ def driver_factory(browser):
 
 
 def pytest_addoption(parser):
-    parser.addoption("--browser", action="store", default="chrome")
+    parser.addoption("--browser", action="store", default="chrome", choices=["chrome", "firefox", "opera", "yandex"])
+    parser.addoption("--executor", action="store", default="localhost")
+
+# FOR SELENIUM GRID
+# @pytest.fixture(scope="session")
+# def browser(request):
+#     logger = logging.getLogger('browser_fixture')
+#     logger.setLevel(LOG_LEVEL)
+#     driver = driver_factory(request.config.getoption("--browser"), request.config.getoption("--executor"))
+#     driver.maximize_window()
+#
+#     def fin():
+#         driver.close()
+#         logger.debug("Браузер закрыт")
+#
+#     request.addfinalizer(fin)
+#     return driver
 
 
+# FOR BROWSERSTACK
 @pytest.fixture(scope="session")
 def browser(request):
-    logger = logging.getLogger('browser_fixture')
-    logger.setLevel(LOG_LEVEL)
-    driver = driver_factory(request.config.getoption("--browser"))
-    driver.maximize_window()
+
+    desired_cap = {
+        'os': 'Windows',
+        'os_version': 'XP',
+        'browser': 'Firefox',
+        'browser_version': '20',
+        'name': "kronnmc1's First Test"
+    }
+
+    driver = webdriver.Remote(
+        command_executor=BROWSERSTACK_URL,
+        desired_capabilities=desired_cap
+    )
 
     def fin():
         driver.close()
-        logger.debug("Браузер закрыт")
 
     request.addfinalizer(fin)
     return driver
@@ -65,7 +97,8 @@ def browser(request):
 @pytest.fixture()
 def base_page(browser):
     page = BasePage(browser)
-    page.go_to(url="http://localhost//")
+    page.go_to(url="http://demo-opencart.ru/")
+    # page.go_to(url="http://localhost//")
     return page
 
 
